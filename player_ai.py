@@ -2,12 +2,16 @@
 
 import numpy as np
 
+
 # This is your team name
-CREATOR = "TeamName"
+CREATOR = "Bumblebeeeeee"
+
+COMPETING_MINE_RADIUS = 40
 
 
 # This is the AI bot that will be instantiated for the competition
 class PlayerAi:
+
     def __init__(self):
         self.team = CREATOR  # Mandatory attribute
 
@@ -16,6 +20,22 @@ class PlayerAi:
         # Record the number of tanks and ships I have at each base
         self.ntanks = {}
         self.nships = {}
+
+    def get_closest_base(self, base, bases):
+        """
+        Returns the closest base to the given base.
+        """
+        closest_base = None
+        closest_distance = np.inf
+        for base_item in bases:
+            if base_item.uid != base.uid:
+
+                distance = np.linalg.norm(np.array((base_item.x, base_item.x)) - np.array((base.x, base.y)))  # TODO: count distance through edges
+                # print(f'{distance = }')
+                if distance < closest_distance:
+                    closest_base = base_item
+                    closest_distance = distance
+        return closest_base
 
     def run(self, t: float, dt: float, info: dict, game_map: np.ndarray):
         """
@@ -52,32 +72,6 @@ class PlayerAi:
 
         # Controlling my bases =================================================
 
-        # Description of information available on bases:
-        #
-        # This is read-only information that all the bases (enemy and your own) have.
-        # We define base = info[team_name_1]["bases"][0]. Then:
-        #
-        # base.x (float): the x position of the base
-        # base.y (float): the y position of the base
-        # base.position (np.ndarray): the (x, y) position as a numpy array
-        # base.team (str): the name of the team the base belongs to, e.g. ‘John’
-        # base.number (int): the player number
-        # base.mines (int): the number of mines inside the base
-        # base.crystal (int): the amount of crystal the base has in stock
-        #     (crystal is per base, not shared globally)
-        # base.uid (str): unique id for the base
-        #
-        # Description of base methods:
-        #
-        # If the base is your own, the object will also have the following methods:
-        #
-        # base.cost("mine"): get the cost of an object.
-        #     Possible types are: "mine", "tank", "ship", "jet"
-        # base.build_mine(): build a mine
-        # base.build_tank(): build a tank
-        # base.build_ship(): build a ship
-        # base.build_jet(): build a jet
-
         # Iterate through all my bases (vehicles belong to bases)
         for base in myinfo["bases"]:
             # If this is a new base, initialize the tank & ship counters
@@ -90,7 +84,7 @@ class PlayerAi:
                 if base.crystal > base.cost("mine"):
                     base.build_mine()
             # Secondly, each base should build a tank if it has less than 5 tanks
-            elif base.crystal > base.cost("tank") and self.ntanks[base.uid] < 5:
+            elif base.crystal > base.cost("tank") and self.ntanks[base.uid] < 10:
                 # build_tank() returns the uid of the tank that was built
                 tank_uid = base.build_tank(heading=360 * np.random.random())
                 # Add 1 to the tank counter for this base
@@ -107,65 +101,18 @@ class PlayerAi:
                 jet_uid = base.build_jet(heading=360 * np.random.random())
 
         # Try to find an enemy target
-        target = None
-        # If there are multiple teams in the info, find the first team that is not mine
-        if len(info) > 1:
-            for name in info:
-                if name != self.team:
-                    # Target only bases
-                    if "bases" in info[name]:
-                        # Simply target the first base
-                        t = info[name]["bases"][0]
-                        target = [t.x, t.y]
+        enemy_bases = []
+        for team_name in info:
+            if team_name != self.team and "bases" in info[team_name]:
+                enemy_bases.extend(info[team_name]["bases"])
+        # print(f'{enemy_bases = }')
 
         # Controlling my vehicles ==============================================
-
-        # Description of information available on vehicles
-        # (same info for tanks, ships, and jets):
-        #
-        # This is read-only information that all the vehicles (enemy and your own) have.
-        # We define tank = info[team_name_1]["tanks"][0]. Then:
-        #
-        # tank.x (float): the x position of the tank
-        # tank.y (float): the y position of the tank
-        # tank.team (str): the name of the team the tank belongs to, e.g. ‘John’
-        # tank.number (int): the player number
-        # tank.speed (int): vehicle speed
-        # tank.health (int): current health
-        # tank.attack (int): vehicle attack force (how much damage it deals to enemy
-        #     vehicles and bases)
-        # tank.stopped (bool): True if the vehicle has been told to stop
-        # tank.heading (float): the heading angle (in degrees) of the direction in
-        #     which the vehicle will advance (0 = east, 90 = north, 180 = west,
-        #     270 = south)
-        # tank.vector (np.ndarray): the heading of the vehicle as a vector
-        #     (basically equal to (cos(heading), sin(heading))
-        # tank.position (np.ndarray): the (x, y) position as a numpy array
-        # tank.uid (str): unique id for the tank
-        #
-        # Description of vehicle methods:
-        #
-        # If the vehicle is your own, the object will also have the following methods:
-        #
-        # tank.get_position(): returns current np.array([x, y])
-        # tank.get_heading(): returns current heading in degrees
-        # tank.set_heading(angle): set the heading angle (in degrees)
-        # tank.get_vector(): returns np.array([cos(heading), sin(heading)])
-        # tank.set_vector(np.array([vx, vy])): set the heading vector
-        # tank.goto(x, y): go towards the (x, y) position
-        # tank.stop(): halts the vehicle
-        # tank.start(): starts the vehicle if it has stopped
-        # tank.get_distance(x, y): get the distance between the current vehicle
-        #     position and the given point (x, y) on the map
-        # ship.convert_to_base(): convert the ship to a new base (only for ships).
-        #     This only succeeds if there is land close to the ship.
-        #
-        # Note that by default, the goto() and get_distance() methods will use the
-        # shortest path on the map (i.e. they may go through the map boundaries).
 
         # Iterate through all my tanks
         if "tanks" in myinfo:
             for tank in myinfo["tanks"]:
+                target = self.get_closest_base(tank, enemy_bases)
                 if (tank.uid in self.previous_positions) and (not tank.stopped):
                     # If the tank position is the same as the previous position,
                     # set a random heading
@@ -173,7 +120,8 @@ class PlayerAi:
                         tank.set_heading(np.random.random() * 360.0)
                     # Else, if there is a target, go to the target
                     elif target is not None:
-                        tank.goto(*target)
+                        # print(target.x, target.y)
+                        tank.goto(target.x, target.y)
                 # Store the previous position of this tank for the next time step
                 self.previous_positions[tank.uid] = tank.position
 
@@ -185,7 +133,10 @@ class PlayerAi:
                     # convert the ship to a base if it is far from the owning base,
                     # set a random heading otherwise
                     if all(ship.position == self.previous_positions[ship.uid]):
-                        if ship.get_distance(ship.owner.x, ship.owner.y) > 20:
+
+                        closest_base = self.get_closest_base(ship, myinfo["bases"])
+
+                        if ship.get_distance(closest_base.x, closest_base.y) > COMPETING_MINE_RADIUS:
                             ship.convert_to_base()
                         else:
                             ship.set_heading(np.random.random() * 360.0)
@@ -196,5 +147,6 @@ class PlayerAi:
         if "jets" in myinfo:
             for jet in myinfo["jets"]:
                 # Jets simply go to the target if there is one, they never get stuck
+                target = self.get_closest_base(jet, enemy_bases)
                 if target is not None:
-                    jet.goto(*target)
+                    jet.goto(target.x, target.y)
